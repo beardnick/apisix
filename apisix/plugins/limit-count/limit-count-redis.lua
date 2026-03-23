@@ -45,13 +45,41 @@ function _M.new(plugin_name, limit, window, conf)
 end
 
 
+local function release_connection(red, conf)
+    local ok, err = red:set_keepalive(conf.redis_keepalive_timeout, conf.redis_keepalive_pool)
+    if ok then
+        return true
+    end
+
+    core.log.error("set keepalive failed: ", err)
+
+    local ok_close, close_err = red:close()
+    if not ok_close then
+        core.log.error("failed to close redis connection: ", close_err)
+    end
+
+    return nil, err
+end
+
+
 local function log_phase_incoming_thread(premature, self, key, cost)
+    if premature then
+        return
+    end
+
     local conf = self.conf
     local red, err = redis.new(conf)
     if not red then
         return red, err
     end
-    return util.redis_log_phase_incoming(self, red, key, cost)
+
+    local res, incoming_err = util.redis_log_phase_incoming(self, red, key, cost)
+    local ok, keepalive_err = release_connection(red, conf)
+    if not ok then
+        return nil, keepalive_err
+    end
+
+    return res, incoming_err
 end
 
 
@@ -88,14 +116,14 @@ function _M.incoming(self, key, cost, dry_run)
     end
 
     local delay, remaining, ttl = util.redis_incoming(self, red, key, not dry_run, cost)
+    local ok, keepalive_err = release_connection(red, conf)
+    if not ok then
+        return nil, keepalive_err, ttl or 0
+    end
+
     if not delay then
         local err = remaining
         return nil, err, ttl or 0
-    end
-
-    local ok, err = red:set_keepalive(conf.redis_keepalive_timeout, conf.redis_keepalive_pool)
-    if not ok then
-        return nil, err, ttl
     end
 
     return delay, remaining, ttl

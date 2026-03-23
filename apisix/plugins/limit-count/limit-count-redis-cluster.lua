@@ -49,6 +49,10 @@ end
 
 
 local function log_phase_incoming_thread(premature, self, key, cost)
+    if premature then
+        return
+    end
+
     return util.redis_log_phase_incoming(self, self.red_cli, key, cost)
 end
 
