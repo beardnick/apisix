@@ -1627,6 +1627,13 @@ passed
 Authorization: Bearer token
 --- error_code eval
 [200, 200, 200, 503]
+--- response_headers eval
+[
+    "X-AI-RateLimit-Remaining-ai-proxy-openai: 29",
+    "X-AI-RateLimit-Remaining-ai-proxy-openai: 19",
+    "X-AI-RateLimit-Remaining-ai-proxy-openai: 9",
+    "X-AI-RateLimit-Remaining-ai-proxy-openai: 0",
+]
 
 
 
@@ -1778,3 +1785,10 @@ passed
 Authorization: Bearer token
 --- error_code eval
 [200, 200, 200, 503]
+--- response_headers eval
+[
+    "X-AI-RateLimit-Remaining-ai-proxy-openai: 29",
+    "X-AI-RateLimit-Remaining-ai-proxy-openai: 19",
+    "X-AI-RateLimit-Remaining-ai-proxy-openai: 9",
+    "X-AI-RateLimit-Remaining-ai-proxy-openai: 0",
+]
