@@ -402,7 +402,7 @@ local function run_rate_limit(conf, rule, ctx, name, cost, dry_run)
     if not conf.policy or conf.policy == "local" then
         delay, remaining, reset = lim:incoming(key, not dry_run, conf, cost)
     else
-        delay, remaining, reset = lim:incoming(key, cost)
+        delay, remaining, reset = lim:incoming(key, cost, dry_run)
     end
 
     local metadata = apisix_plugin.plugin_metadata("limit-count")
