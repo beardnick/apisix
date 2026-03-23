@@ -19,6 +19,7 @@ local setmetatable = setmetatable
 local ipairs = ipairs
 local type = type
 local core = require("apisix.core")
+local fetch_secrets = require("apisix.secret").fetch_secrets
 local limit_count = require("apisix.plugins.limit-count.init")
 local policy_to_additional_properties = require("apisix.utils.redis-schema").schema
 
@@ -255,19 +256,34 @@ local function fetch_limit_conf_kvs(conf)
 end
 
 
+local function resolve_limit_conf(plugin_conf, instance_name)
+    local conf = fetch_secrets(plugin_conf, true)
+    local limit_conf
+
+    if conf.rules and #conf.rules > 0 then
+        limit_conf = transform_limit_conf(conf)
+        return conf, limit_conf
+    end
+
+    local limit_conf_kvs
+    if not conf.policy or conf.policy == "local" then
+        limit_conf_kvs = limit_conf_cache(plugin_conf, nil, fetch_limit_conf_kvs, conf)
+    else
+        limit_conf_kvs = fetch_limit_conf_kvs(conf)
+    end
+
+    limit_conf = limit_conf_kvs[instance_name]
+    return conf, limit_conf
+end
+
+
 function _M.access(conf, ctx)
     local ai_instance_name = ctx.picked_ai_instance_name
     if not ai_instance_name then
         return
     end
 
-    local limit_conf
-    if conf.rules and #conf.rules > 0 then
-        limit_conf = transform_limit_conf(conf)
-    else
-        local limit_conf_kvs = limit_conf_cache(conf, nil, fetch_limit_conf_kvs, conf)
-        limit_conf = limit_conf_kvs[ai_instance_name]
-    end
+    local _, limit_conf = resolve_limit_conf(conf, ai_instance_name)
     if not limit_conf then
         return
     end
@@ -299,8 +315,7 @@ function _M.check_instance_status(conf, ctx, instance_name)
         return nil, "invalid instance_name"
     end
 
-    local limit_conf_kvs = limit_conf_cache(conf, nil, fetch_limit_conf_kvs, conf)
-    local limit_conf = limit_conf_kvs[instance_name]
+    local _, limit_conf = resolve_limit_conf(conf, instance_name)
     if not limit_conf then
         return true
     end
@@ -333,6 +348,9 @@ function _M.log(conf, ctx)
         return
     end
 
+    local limit_conf
+    conf, limit_conf = resolve_limit_conf(conf, instance_name)
+
     local used_tokens = get_token_usage(conf, ctx)
     if not used_tokens then
         core.log.error("failed to get token usage for llm service")
@@ -340,14 +358,6 @@ function _M.log(conf, ctx)
     end
 
     core.log.info("instance name: ", instance_name, " used tokens: ", used_tokens)
-
-    local limit_conf
-    if conf.rules and #conf.rules > 0 then
-        limit_conf = transform_limit_conf(conf)
-    else
-        local limit_conf_kvs = limit_conf_cache(conf, nil, fetch_limit_conf_kvs, conf)
-        limit_conf = limit_conf_kvs[instance_name]
-    end
     if limit_conf then
         limit_count.rate_limit(limit_conf, ctx, plugin_name, used_tokens)
     end
