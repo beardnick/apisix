@@ -256,24 +256,54 @@ local function fetch_limit_conf_kvs(conf)
 end
 
 
-local function resolve_limit_conf(plugin_conf, instance_name)
+local function resolve_local_limit_conf(plugin_conf, instance_name)
+    if plugin_conf.rules and #plugin_conf.rules > 0 then
+        return plugin_conf, transform_limit_conf(plugin_conf)
+    end
+
+    local limit_conf_kvs = limit_conf_cache(plugin_conf, nil, fetch_limit_conf_kvs, plugin_conf)
+    return plugin_conf, limit_conf_kvs[instance_name]
+end
+
+
+local function find_instance_conf(conf, instance_name)
+    local matched_conf
+    for _, instance_conf in ipairs(conf.instances or {}) do
+        if instance_conf.name == instance_name then
+            matched_conf = instance_conf
+        end
+    end
+
+    return matched_conf
+end
+
+
+local function resolve_remote_limit_conf(plugin_conf, instance_name)
     local conf = fetch_secrets(plugin_conf, true)
-    local limit_conf
 
     if conf.rules and #conf.rules > 0 then
-        limit_conf = transform_limit_conf(conf)
-        return conf, limit_conf
+        return conf, transform_limit_conf(conf)
     end
 
-    local limit_conf_kvs
-    if not conf.policy or conf.policy == "local" then
-        limit_conf_kvs = limit_conf_cache(plugin_conf, nil, fetch_limit_conf_kvs, conf)
-    else
-        limit_conf_kvs = fetch_limit_conf_kvs(conf)
+    local instance_conf = find_instance_conf(conf, instance_name)
+    if instance_conf then
+        return conf, transform_limit_conf(conf, instance_conf)
     end
 
-    limit_conf = limit_conf_kvs[instance_name]
-    return conf, limit_conf
+    if not conf.limit then
+        return conf, nil
+    end
+
+    return conf, transform_limit_conf(conf, nil, instance_name)
+end
+
+
+local function resolve_limit_conf(plugin_conf, instance_name)
+    if not plugin_conf.policy or plugin_conf.policy == "local" then
+        return resolve_local_limit_conf(plugin_conf, instance_name)
+    end
+
+    return resolve_remote_limit_conf(plugin_conf, instance_name)
 end
 
 
