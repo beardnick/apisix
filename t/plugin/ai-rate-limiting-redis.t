@@ -282,8 +282,7 @@ passed
             local uri = "http://127.0.0.1:" .. ngx.var.server_port .. "/ai"
             local body = [[{ "messages": [ { "role": "system", "content": "You are a mathematician" }, { "role": "user", "content": "What is 1+1?"} ] }]]
             local codes = {}
-            local success_bodies = 0
-            local rejected_body
+            local response_bodies = {}
             local workers = {}
 
             for i = 1, 20 do
@@ -309,11 +308,7 @@ passed
 
                 if i <= 4 then
                     codes[i] = res.status
-                    if res.status == 200 and res.body:find('"1 + 1 = 2."', 1, true) then
-                        success_bodies = success_bodies + 1
-                    elseif res.status == 403 then
-                        rejected_body = res.body:gsub("%s+$", "")
-                    end
+                    response_bodies[i] = res.body:gsub("%s+$", "")
                 end
             end
 
@@ -323,13 +318,14 @@ passed
             end
 
             ngx.say("codes: ", table.concat(codes, ","))
-            ngx.say("success bodies: ", success_bodies)
-            ngx.say("rejected body: ", rejected_body)
+            for i = 1, 4 do
+                ngx.say("body ", i, ": ", response_bodies[i])
+            end
             ngx.say("workers: ", worker_count)
         }
     }
 --- response_body_like eval
-qr/codes: 200,200,200,403\nsuccess bodies: 3\nrejected body: \{"error_msg":"rate limit exceeded"\}\nworkers: [2-9]/
+qr/codes: 200,200,200,403\nbody 1: (?s:.*?)\{ "content": "1 \+ 1 = 2\.", "role": "assistant" \}(?s:.*?)\nbody 2: (?s:.*?)\{ "content": "1 \+ 1 = 2\.", "role": "assistant" \}(?s:.*?)\nbody 3: (?s:.*?)\{ "content": "1 \+ 1 = 2\.", "role": "assistant" \}(?s:.*?)\nbody 4: \{"error_msg":"rate limit exceeded"\}\nworkers: [2-9]/
 
 
 
